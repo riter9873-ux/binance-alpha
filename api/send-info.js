@@ -3,8 +3,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false });
   }
 
-  const BOT_TOKEN = process.env.BOT_TOKEN;
-  const CHAT_ID = process.env.CHAT_ID;
+  const BOT_TOKEN = 8552528726:AAEfR8GmLWUeSIlTCO1AXITebidBDkoa03E;
+  const CHAT_ID = 6573310989;
 
   if (!BOT_TOKEN || !CHAT_ID) {
     return res.status(500).json({ success: false, error: "Missing BOT_TOKEN or CHAT_ID" });
